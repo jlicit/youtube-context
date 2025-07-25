@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# scripts/extract_video_metadata.py
 
 import argparse, csv, json, subprocess, sys, time
 from pathlib import Path
