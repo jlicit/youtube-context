@@ -1,20 +1,17 @@
 from __future__ import annotations
-
-import random
-import subprocess
-import tempfile
-import time
+import random, subprocess, tempfile, time
 from pathlib import Path
-
 from .config import Config
 
 __all__ = ["local_path_for"]
 
-def _download_to_temp(url: str, cfg: Config) -> Path:
-    """Download a small MP4 and return its path."""
-    time.sleep(random.uniform(cfg.sleep_min, cfg.sleep_max))           # polite pause
-    tmpdir = Path(tempfile.mkdtemp())
-    target = tmpdir / "video.%(ext)s"
+def _download(url: str, cfg: Config) -> Path:
+    """Download a low‑res MP4 to a temp dir and return its path."""
+    if cfg.polite:                                           
+        time.sleep(random.uniform(cfg.sleep_min, cfg.sleep_max))
+
+    tmpdir  = Path(tempfile.mkdtemp())
+    target  = tmpdir / "video.%(ext)s"
 
     base_cmd = [
         "yt-dlp",
@@ -26,6 +23,7 @@ def _download_to_temp(url: str, cfg: Config) -> Path:
         "--quiet",
         url,
     ]
+
     for fmt in ("best[ext=mp4][height<=480]/best[ext=mp4]", "best"):
         try:
             subprocess.check_call(base_cmd + ["-f", fmt])
@@ -37,17 +35,10 @@ def _download_to_temp(url: str, cfg: Config) -> Path:
 
     return next(tmpdir.glob("video.*"))
 
-def local_path_for(src: str, cfg: Config) -> tuple[str, Path | None]:
-    """
-    Ensure *src* is a local file.
-
-    Returns
-    -------
-    local_path : str            – absolute path usable by ffmpeg
-    temp_file  : Path | None    – delete this when finished
-    """
+def local_path_for(src: str, cfg: Config):
+    """Return (local_path, temp_file_to_delete_or_None)."""
     p = Path(src)
     if p.exists():
         return p.as_posix(), None
-    tmp_file = _download_to_temp(src, cfg)
-    return tmp_file.as_posix(), tmp_file
+    tmp = _download(src, cfg)
+    return tmp.as_posix(), tmp
