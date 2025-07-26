@@ -1,19 +1,15 @@
 from __future__ import annotations
-
-import csv
-import logging
+import csv, logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Iterable, Sequence
-
-from .analyzer import analyze_one
-from .config import Config
-from .io_utils import flush_rows
+from .analyzer   import analyze_one
+from .config     import Config
+from .io_utils   import flush_rows
 
 __all__ = ["process_csv"]
 
-def _iter_vids(csv_path: Path) -> Iterable[tuple[str, int]]:
-    with csv_path.open(newline="", encoding="utf-8") as fp:
+def _iter_vids(path: Path):
+    with path.open(newline="", encoding="utf-8") as fp:
         reader = csv.reader(fp)
         header = next(reader, None)
         rows   = list(reader)
@@ -31,35 +27,35 @@ def _iter_vids(csv_path: Path) -> Iterable[tuple[str, int]]:
             dur = 0
         yield vid, dur
 
-def _worker(url_vid: tuple[str, str], cfg: Config) -> Sequence[str]:
-    url, vid = url_vid
+def _work(pair, cfg):
+    url, vid = pair
     try:
         cuts, dur, cpm = analyze_one(url, cfg)
         return vid, str(cuts), f"{dur:.1f}", f"{cpm:.2f}"
-    except Exception as exc:  # noqa: BLE001
-        logging.warning("X %s: %s", vid, exc)
+    except Exception as e:                                   # noqa: BLE001
+        logging.warning("X %s: %s", vid, e)
         return vid, "NA", "NA", "NA"
 
-def process_csv(csv_path: Path, cfg: Config, workers: int = 4) -> None:
-    buffer: list[list[str]] = []
-    futures = {}
+def process_csv(csv_path: Path, cfg: Config, workers: int | None = None):
+    if workers is None:
+        workers = (os := __import__('os')).cpu_count() or 4   
+    buffer, futures = [], {}
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
         for vid, dur in _iter_vids(csv_path):
             if dur >= cfg.max_duration:
                 buffer.append((vid, "Skipped (duration)", "NA", "NA"))
                 continue
-            url = f"https://youtu.be/{vid}"
-            futures[pool.submit(_worker, (url, vid), cfg)] = None
+            futures[pool.submit(_work, (f"https://youtu.be/{vid}", vid), cfg)] = None
 
-        logging.info("Queued %d videos across %d workers", len(futures), workers)
+        logging.info("Queued %d videos (%d workers)", len(futures), workers)
 
-        for idx, fut in enumerate(as_completed(futures), 1):
+        for n, fut in enumerate(as_completed(futures), 1):
             buffer.append(fut.result())
             if len(buffer) >= cfg.batch_size:
                 flush_rows(buffer, cfg)
-            if idx % 50 == 0 or idx == len(futures):
-                logging.info("  • %d/%d complete", idx, len(futures))
+            if n % 50 == 0 or n == len(futures):
+                logging.info("  • %d/%d complete", n, len(futures))
 
     flush_rows(buffer, cfg)
     logging.info("Batch finished → %s", cfg.out_csv)
