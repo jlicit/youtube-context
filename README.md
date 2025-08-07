@@ -40,10 +40,15 @@ Results stream into cut_results.csv in 200 row chunks by default.
 
 # Command line options
 -j / --workers N	Override auto detected process pool size...(Dependent on how many cores your CPU has)
+
 --batch-size N		Flush results every N rows...(Default is 200)
+
 --threshold F		Scene change detection threshold (0.0 1.0)...(Default is set to 0.10)
+
 --downscale W	Downscale width before analysis (set 0 to disable)...(Default set to 480 by 480 pixels)
+
 --no-throttle	Disable polite sleeps/rate limits (You may trigger YouTube’s bot detection and get shadow banned for a few hours. The faster you process without a throttle, the riskier it gets)
+
 --log-level … Debugging
 
 # Library usage
