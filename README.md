@@ -14,11 +14,10 @@ Config dataclass: All tunables (threshold, downscale, batch size, etc.) live in 
 
 Helpers are re exported in cutcounter.__init__ for ease of use.
 
-
 # Installing
 
 `#System requirements: Python ≥3.9, ffmpeg ≥4.0, yt-dlp ≥2024.05
-git clone https://github.com/jlicit/cutcounter.git
+git clone https://github.com/jlicit/youtube-context.git
 cd cutcounter
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt   # installs Python dependants
