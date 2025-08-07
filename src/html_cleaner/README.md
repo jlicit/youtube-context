@@ -1,47 +1,27 @@
-# YouTube Watch History HTML Cleaner (R)
+# About extract_watch_history
 
-This script extracts structured data from the `watch-history.html` file provided by Google Takeout and outputs a clean CSV file. It is the **first stage** in the YouTube Context Project pipeline.
+extract_watch_history extracts and cleans data from the `watch-history.html` file downloaded by Google Takeout and outputs a cleaned CSV. It's the first step in the YouTube Context pipeline.
 
----
 
-## What It Does
+## Features
 
-- Parses the YouTube watch history HTML file (`watch-history.html`)
-- Extracts:
-  - Video title
-  - Creator/channel name
-  - Watch date and time
-- Outputs a CSV file with one row per watched video
+Parses the YouTube watch history HTML file `watch-history.html`
 
----
+Extracts: Video title, Creator/channel name, Watch date and time.
 
-## Input
-
-- `watch-history.html`: Downloaded from your Google Takeout archive.
-
----
-
-## Output
-
-- `outputs/watch_history_detailed.csv`: A CSV file with columns:
-  - `title`
-  - `creator`
-  - `date`
-  - `time`
-
----
+Outputs: CSV with one row per watched video.
 
 ## Dependencies
 
 This script uses the following R packages:
 
-- `rvest`
-- `dplyr`
-- `stringr`
-- `tidyr`
-- `readr`
+`rvest`
+`dplyr`
+`stringr`
+`tidyr`
+`readr`
 
-You can install them via:
+# Installing
 
 ```r
 install.packages(c("rvest", "dplyr", "stringr", "tidyr", "readr"))
