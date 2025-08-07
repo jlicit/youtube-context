@@ -11,9 +11,9 @@ This package grew out of my interest in finding the the pacing of thousands of Y
 
 Random sleeps, rate limits, and cookie support help with staying below YouTube’s radar.
 
-Config dataclass: All tunables (threshold, downscale, batch size, etc.) live in Config for simple changes.
+**Config dataclass:** All tunables (threshold, downscale, batch size, etc.) live in Config for simple changes.
 
-Helpers are re exported in cutcounter.__init__ for ease of use.
+Helpers are re-exported in cutcounter.__init__ for ease of use.
 
 # Installing
 
@@ -92,7 +92,7 @@ A second ffprobe call grabs the exact video duration.
 
 **Metrics**
 
-Cuts per minute = N of cuts detected divided by minutes (duration of video in seconds divided by 60 seconds).
+Cuts per minute is calculated by N of cuts detected divided by minutes (duration of video in seconds divided by 60 seconds).
 
 # Configuration reference (All live in config.py)
 Field			Default		Notes
