@@ -25,8 +25,6 @@ A newly created Google Compute Engine (GCE) instance.
 
 Access to a terminal with sudo privileges on the instance.
 
-For this project I used the following specs: n2d-highcpu-8 with 8 vCPUs and 8 GB memory located in the us-west1-c region.
-
 # Installing
 **Create a GCE Instance:**
 
