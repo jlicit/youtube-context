@@ -96,6 +96,7 @@ Installs yt-dlp in the virtual environment, ensuring that Python dependencies ar
 Creates the `$HOME/yt_cut_counter directory` to store your cut_counter.py script and CSV files.
 
 **Usage Instructions:**
+
 After setup, the script provides instructions to start a screen session, activate the Python virtual environment, and run the cutcounter.py script for processing video data.
 
 # Extra Tips
