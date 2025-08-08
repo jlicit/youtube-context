@@ -30,49 +30,80 @@ For this project I used the following specs: n2d-highcpu-8 with 8 vCPUs and 8 GB
 # Installing
 
 **Create a GCE Instance:**
+
 Instance name: cut-counter
+
 Machine type: n2d-highcpu-8 (8 vCPUs, 8 GB Memory)
+
 Location: us-west1-c
+
 **Upload the Setup Script:**
+
 Copy the script below and save it as setup_cut_counter.sh on your local drive.
+
 Upload this file to your GCE instance.
+
 **Run the Setup Script:**
+
 SSH into your GCE instance.
+
 Run the following command to set up the environment:
+
 `bash setup_cut_counter.sh`
 
 # Quick Start
 **Upload Files:**
+
 After the environment is set up, upload your cut_counter.py script and CSV file(s) to the workspace directory ($HOME/yt_cut_counter) on the GCE instance.
+
 **Start a Screen Session:**
+
 To run long processes in the background, start a screen session:
 `screen -S cuts`
+
 **Activate the Python Environment:**
+
 `source $HOME/yt_cut_counter/venv/bin/activate`
+
 **Run the Cut Counter Script:**
+
 `python cut_counter.py your.csv`
+
 **Detach and Reattach the Screen:**
+
 Detach the screen session: `Ctrl-A` + `D`
+
 Reattach the screen session: `screen -r cuts`
 
 # How It Works
+
 The script installs and configures the following on your GCE instance:
+
 **System Packages:**
+
 Updates APT and installs Python 3 dependencies (python3-venv, python3-pip), ffmpeg (required for video processing), and screen (for running long processes).
+
 **yt-dlp:**
+
 Installs yt-dlp from the official PPA for scraping video metadata.
+
 **Python Virtual Environment:**
+
 Creates a Python 3 virtual environment in the `$HOME/yt_cut_counter/venv` directory.
+
 Installs yt-dlp in the virtual environment, ensuring that Python dependencies are isolated from the system.
+
 **Workspace Setup:**
+
 Creates the `$HOME/yt_cut_counter directory` to store your cut_counter.py script and CSV files.
 
 # Usage Instructions:
+
 After setup, the script provides instructions to start a screen session, activate the Python virtual environment, and run the cutcounter.py script for processing video data.
 
 # Extra Tips
+
 The screen tool allows you to run processes in the background, even after you disconnect from the terminal.
-This is particularly useful for long-running tasks such as video processing with cut_counter.py.
 
 You can always reconnect to your screen session using `screen -r cuts` to check the status or continue the task.
 
