@@ -1,5 +1,5 @@
 # About setup_py_env
-This script is an optional third step in the pipeline. Think of it as step 2.5. It's completely optional specifically for setting up an virtual instance environment for cutcounter. I went this route becuase I otherwise would have turned my small little laptop into a toaster overnight so I chose to outsource the computing.
+This script is a completely optional third step in the pipeline (think of it as step 2.5). It's for setting up a virtual instance environment for cutcounter.py. I went this route becuase I otherwise would have turned my small little laptop into a toaster overnight so I chose to outsource the computing to Google.
 
 It sets up a fresh Debian/Ubuntu-based Google Compute Engine (GCE) instance for running cutcounter.py.
 
