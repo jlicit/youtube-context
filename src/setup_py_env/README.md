@@ -1,5 +1,7 @@
 # About setup_py_env
-This script sets up a fresh Debian/Ubuntu-based Google Compute Engine (GCE) instance for running cutcounter.py.
+This script is an optional third step in the pipeline. Think of it as step 2.5. It's completely optional specifically for setting up an virtual instance environment for cutcounter. I went this route becuase I otherwise would have turned my small little laptop into a toaster overnight so I chose to outsource the computing.
+
+It sets up a fresh Debian/Ubuntu-based Google Compute Engine (GCE) instance for running cutcounter.py.
 
 It installs all necessary dependencies, including system libraries, yt-dlp, FFmpeg, and creates a Python virtual environment.
 
