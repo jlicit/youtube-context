@@ -1,10 +1,14 @@
-# watch_events_fe
 
 ## About
 `watch_events_fe` creates a clean, feature-rich view of YouTube watch events for analysis and dashboards.  
 It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior, derives binge/high-cuts flags, and applies playback speed rules to help interpret “time watched” consistently across periods.
 
+`sessions_features_tbl` builds session-level features from YouTube watch events: sessionization (idle gap), wall-time vs content-time consumption (speed-aware), cuts-per-minute (wall & content), average playback speed, and binge flags (time- or count-based).
+
+`weekly_metrics_vw` aggregates session-level YouTube watch behavior into weekly KPIs. It reports both wall clock viewing (actual time spent) and speed-aware content time (runtime consumed after accounting for playback speed).
+
 ## Features
+### watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
 - Timezone-aware timestamps (America/Los_Angeles).
 - Elapsed seconds parsed from `Elapsed Time` (`hh:mm:ss`, `mm:ss`, or `ss`).
@@ -12,8 +16,24 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 - Sessionization using gap thresholds (30 min default) with binge flags (≥45 min or ≥5 videos).
 - Category-relative “high-cuts” flag using per-category 75th percentile of cuts/min.
 - Use of `SAFE_CAST`, `SAFE_PARSE_*`, and `SAFE_DIVIDE`.
-
+### sessions_features_tbl
+- Sessionization with configurable idle gap.
+- Wall clock watched seconds with tail capping on the final event.
+- Content-time (runtime actually advanced) using playback speed.
+- Scaled cuts proportional to content fraction consumed.
+- CPM: wall time and content time variants.
+- Average playback speed per session.
+- Binge flags by time, count, and content-time.
+### weekly_metrics_vw
+- Weekly rollups with Monday week start and Pacific Time localization.
+- Dual time lenses: Wall time (what you actually spent watching). Content time (runtime consumed at your playback speed).
+- Binge metrics: rate and time share (both wall time and content-time definitions).
+- Cuts/min intensity: unweighted and time-weighted averages (and content-time variants).
+- Playback-speed KPI: week-level average playback speed.
+- Use of `SAFE_DIVIDE`, `NULLIF`, and rounding for KPI cards.
+- 
 ## Installing
+### watch_events_fe
 This project assumes BigQuery Standard SQL.
 
 1) Clone or copy the folder into your GitHub repo:
@@ -23,17 +43,31 @@ This project assumes BigQuery Standard SQL.
 - `YOUR_DATASET`  
 …and ensure your source table `cleaned_data` exists (this is your cleaned Takeout+enrichment table).
 
-## Quick start
-From the BigQuery console (or `bq` CLI), run:
+### sessions_features_tbl
+Copy the SQL file into your repo, e.g. `sql/sessions_features.sql`.
 
-```sql
--- Create or replace the analytics view
-CREATE OR REPLACE VIEW `YOUR_PROJECT_ID.YOUR_DATASET.watch_events_fe` AS
--- (paste contents of sql/watch_events_fe.sql below the line that defines the view)
-```
+Set environment replacements when running (or find/replace in the file):
+
+`${PROJECT}` - your GCP project id
+
+`${DATASET}` - your BigQuery dataset
+
+Ensure the source table exists:
+
+`${PROJECT}.${DATASET}.watch_events_fe` with columns:
+
+`watch_ts` `TIMESTAMP`
+
+`video_id` `STRING`
+
+`duration_meta_s` `FLOAT64` (or `INT64`)
+
+`cuts_total` `FLOAT64` (or `INT64`)
+
+`playback_speed` `FLOAT64`
 
 ## How it works
-Pipeline stages (CTEs):
+### watch_events_fe
 - speed_rules — central place to declare playback speed by date range (editable).
 - base — normalize types (watch_date, watch_time, numeric casts with SAFE_CAST).
 - typed — build watch_ts in America/Los_Angeles.
@@ -43,10 +77,34 @@ Pipeline stages (CTEs):
 - sessionized — windowed session totals & binge flags.
 - cuts_flags — category-relative 75th percentile to mark high_cuts_flag.
 - final SELECT — keep original column names (after safe casting) for compatibility.
+### sessions_features_tbl
+- params: tune idle_s, tail_cap_s, binge_time_s, binge_count_min.
+- watched_s: wall-clock seconds for each event, capped by gap to next event (or tail cap) and by duration_meta_s.
+- consumed_runtime_s: speed-aware content time = watched_s * playback_speed, capped by duration_meta_s.
+- cuts_watched: scales cuts_total by the content fraction consumed.
+- sessionization: cumulative sum of is_new_session to assign session_id.
+- aggregates: per session rollups; derived metrics for CPM & flags.
+### weekly_metrics_vw
+- Truncates each session to a Monday-starting week localized to America/Los_Angeles.
+- Brings in session features:
+
+`session_total_time_s` (wall time in seconds)
+
+`session_consumed_runtime_s` (content time in seconds; speed-aware)
+
+`session_mean_cuts_per_min` (+ _content)
+
+`session_avg_playback_speed`
+
+- Binge flags for wall-time and content-time definitions.
+- Aggregations (GROUP BY `week_start`)
+- Wall-time KPIs: `hours watched`, `count of sessions`, `binge rate`, `time-weighted cuts/min`, `avg session minutes`, `binge time share`.
+- Content-time KPIs: `hours consumed`, `avg playback speed`, `binge rate (content)`, `binge time share (content)`, `cuts/min (unweighted & time-weighted using session_consumed_runtime_s)`.
 
 If you watched at ~2× for long periods and later at 1×. Analysts could misread “time watched” without knowing this context. Explicit rules make that assumption visible and auditable.
 
-## Variables used as input
+## Variable Tables
+### Variables used as input
 
 | Variable                                   | Type         | How it’s made / parsed                                                                 | What it’s for                               | Example            |
 |---                                         |---           |---                                                                                      |---                                           |---                 |
@@ -61,7 +119,7 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | `category`                                  | STRING       | As-is                                                                                   | For category-relative flags                  | `News & Politics`  |
 | `view_count`, `like_count`, `duration_cut_s`| INT/NUM      | Cast to `INT64` / `FLOAT64`                                                             | Optional descriptive stats                   | `250913`, `2444`, `589.1` |
 
-## Variables output as feature engineered watch events 
+### Variables output as feature engineered watch events 
 
 | Variable                                   | Type     | How it’s made / formula (BigQuery)                                                                                                                                          | What it’s for                                           | Example                           |
 |---                                          |---       |---                                                                                                                                                                           |---                                                     |---                                |
@@ -83,7 +141,45 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | `cuts_q75_cat`                              | FLOAT    | `PERCENTILE_CONT(cuts_per_min, 0.75) OVER (PARTITION BY category)`                                                                                                          | Category baseline (75th pct CPM)                        | `21.5`                             |
 | `high_cuts_flag`                            | BOOL     | `cuts_per_min >= cuts_q75_cat`                                                                                                                                              | High-intensity content flag                             | `FALSE`                            |
 | *Recast numerics*                           | —        | Internal `_i` / `_f` casts mapped back to original names (e.g., `gap_prev_s_i → gap_prev_s`)                                                                                | Clean numeric schema                                    | `gap_prev_s = 95`                  |
-| `playback_speed`                            | FLOAT64  | From **speed rules** by `watch_date`; defaults to `1.0`. Example rule: everything before `2024-09-01` at `2.0`.                                                             | Playback speed applied to the event                     | `2`                                |
+| `playback_speed`                            | FLOAT64  | From speed rules by `watch_date`; defaults to `1.0`. Example rule: everything before `2024-09-01` at `2.0`.                                                             | Playback speed applied to the event                     | `2`                                |
+
+### Variables output as session features 
+
+| Variable                              | Type     | How it’s made / formula (BigQuery)                                                                                             | What it’s for                                                     | Example                          |
+|---                                     |---       |---                                                                                                                              |---                                                                |---                               |
+| `session_id`                           | INT      | `SUM(CASE WHEN is_new_session THEN 1 ELSE 0 END) OVER (ORDER BY event_idx)`                                                     | Stable session key                                                | `13457`                          |
+| `session_start_ts`                     | TIMESTAMP| `MIN(watch_ts) OVER (PARTITION BY session_id)`                                                                                  | Session start (PT/UTC timestamp)                                  | `2019-04-01 20:31:00-07:00`      |
+| `events_in_session`                    | INT      | `COUNT(*) OVER (PARTITION BY session_id)`                                                                                       | Number of events in the session                                   | `7`                               |
+| `session_total_time_s`                 | INT      | `SUM(watched_s) OVER (PARTITION BY session_id)` where `watched_s = LEAST(gap_to_next_s, duration_meta_s)` (cap tail)            | Actual seconds watched in session                                 | `5400`                           |
+| `session_cuts_watched_total`           | FLOAT64  | `SUM(cuts_total * watched_s / duration_meta_s) OVER (PARTITION BY session_id)`                                                  | Cuts scaled by fraction actually watched                          | `1200`                           |
+| `session_mean_cuts_per_min`            | FLOAT64  | `SAFE_DIVIDE(session_cuts_watched_total, session_total_time_s/60.0)`                                                            | Session-level CPM (cuts per wall-minute)                          | `13.33`                          |
+| `binge_time_flag`                      | BOOL     | `session_total_time_s >= 7200`                                                                                                  | ≥ 2 hours watched                                                 | `FALSE`                          |
+| `binge_count_flag`                     | BOOL     | `events_in_session >= 6`                                                                                                        | ≥ 6 events                                                        | `TRUE`                           |
+| `session_consumed_runtime_s`           | FLOAT64  | `SUM(consumed_runtime_s) OVER (PARTITION BY session_id)`                                                                        | “Content time” advanced (capped at each video’s runtime)          | `1575` s                         |
+| `session_mean_cuts_per_min_content`    | FLOAT64  | `SAFE_DIVIDE(session_cuts_watched_total, session_consumed_runtime_s/60.0)`                                                      | CPM per content minute (creator pacing; speed-invariant)      | `11.14 cuts/min`                 |
+| `session_avg_playback_speed`           | FLOAT64  | `SAFE_DIVIDE(session_consumed_runtime_s, session_total_time_s)`                                                                 | Speed-weighted average playback speed for the session             | `1.5`                            |
+| `binge_time_flag_content`              | BOOL     | `session_consumed_runtime_s >= 7200`                                                                                            | Content-based binge flag (parallel to wall-time binge)            | `FALSE`                          |
+| `consumed_runtime_s` *(per event, temp)* | FLOAT64| `LEAST(duration_meta_s, watched_s * playback_speed)`                                                                            | Temp per-event field used for session aggregates              | `—`                              |
+| `cuts_watched` *(per event, temp)*     | FLOAT64  | `SAFE_MULTIPLY(cuts_total, SAFE_DIVIDE(consumed_runtime_s, duration_meta_s))`                                                   | Temp per-event field scaling cuts by content fraction consumed | `—`                              |
+
+### Variables output as weekly metrics
+
+| Variable                                         | Type         | How it’s made / formula (BigQuery)                                                                                                  | What it’s for                                                                                   | Example (your sample)            |
+|---                                               |---           |---                                                                                                                                  |---                                                                                               |---                               |
+| `week_start`                                     | TIMESTAMP    | `TIMESTAMP_TRUNC(session_start_ts, WEEK(MONDAY), 'America/Los_Angeles')`                                                            | Week bucket in PT (renders ~08:00/07:00 UTC pre/post DST)                                        | `2019-04-01 07:00:00 UTC`        |
+| `hours_watched`                                  | FLOAT (h)    | `SUM(session_total_time_s) / 3600`                                                                                                  | Total watch time that week                                                                       | `10.9`                           |
+| `sessions`                                       | INT          | `COUNT(*)`                                                                                                                          | Number of sessions that week                                                                     | `30`                             |
+| `binge_rate`                                     | FLOAT (0–1)  | `COUNTIF(binge_time_flag OR binge_count_flag) / COUNT(*)`                                                                           | Share of sessions flagged as binge (time or count)                                           | `0.3`                            |
+| `mean_cuts_per_min_unweighted`                   | FLOAT        | `AVG(session_mean_cuts_per_min)`                                                                                                    | Simple average CPM across sessions                                                               | `26.34`                          |
+| `mean_cuts_per_min_time_weighted`                | FLOAT        | `SUM(session_mean_cuts_per_min * session_total_time_s) / SUM(session_total_time_s)`                                                 | Time-weighted CPM (longer sessions count more)                                                   | `19.56`                          |
+| `avg_session_min`                                | FLOAT (min)  | `SUM(session_total_time_s) / COUNT(*) / 60`                                                                                         | Average session length                                                                           | `21.8`                           |
+| `binge_time_share`                               | FLOAT (0–1)  | `SUM(CASE WHEN binge_time_flag OR binge_count_flag THEN session_total_time_s ELSE 0 END) / SUM(session_total_time_s)`               | Share of weekly watch time spent in binge sessions                                           | `0.42`                           |
+| `hours_consumed`                                 | FLOAT64 (h)  | `SUM(session_consumed_runtime_s) / 3600`                                                                                            | Content hours advanced (≥ `hours_watched` when avg speed > 1)                                | `20.55`                          |
+| `avg_playback_speed`                             | FLOAT64      | `SUM(session_consumed_runtime_s) / SUM(session_total_time_s)`                                                                       | Sanity check: ≈ `hours_consumed / hours_watched`                                                | `1.256`                          |
+| `binge_rate_content`                             | FLOAT64      | `COUNTIF(binge_time_flag_content OR binge_count_flag) / COUNT(*)`                                                                   | Share of sessions that are binge by content time or event count                          | `0.271`                          |
+| `binge_time_share_content`                       | FLOAT64      | `SUM(CASE WHEN binge_time_flag_content THEN session_consumed_runtime_s ELSE 0 END) / SUM(session_consumed_runtime_s)`               | Fraction of weekly content time in binge sessions                                            | `0.589`                          |
+| `mean_cuts_per_min_unweighted_content`           | FLOAT64      | `AVG(session_mean_cuts_per_min_content)`                                                                                            | Simple average across sessions using content-minute CPM                                      | `21.74`                          |
+| `mean_cuts_per_min_time_weighted_content`        | FLOAT64      | `SUM(session_mean_cuts_per_min_content * session_consumed_runtime_s) / SUM(session_consumed_runtime_s)`                             | Content-time weighted CPM                                                                    | `15.2`                           |
 
 
 ## License
