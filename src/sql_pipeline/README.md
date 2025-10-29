@@ -61,7 +61,7 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | `category`                                  | STRING       | As-is                                                                                   | For category-relative flags                  | `News & Politics`  |
 | `view_count`, `like_count`, `duration_cut_s`| INT/NUM      | Cast to `INT64` / `FLOAT64`                                                             | Optional descriptive stats                   | `250913`, `2444`, `589.1` |
 
-## Variables output as Feature-engineered watch events 
+## Variables output as feature engineered watch events 
 
 | Variable                                   | Type     | How it’s made / formula (BigQuery)                                                                                                                                          | What it’s for                                           | Example                           |
 |---                                          |---       |---                                                                                                                                                                           |---                                                     |---                                |
