@@ -9,6 +9,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `05_event_features_vw` generates a view of YouTube watch events for analysis and dashboarding. It standardizes time features, computes content-adjusted watch ratios (respecting playback speed and video duration), flags early exits, and bins scene-change rates by category.
 
+'06_session_category_share_long_vw'produces a long-format table of per-session category shares—the fraction of each session’s consumed runtime spent in each category. It’s used for downstream content mix visuals and trend analysis.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -70,6 +72,12 @@ Check that boundary times match up.
 - `cuts_per_min_decile_cat` (0–9) and `cuts_per_min_quintile_cat` (0–4) by category
 - `creator_switch_flag` (global previous-event comparison)
 - preserves source `gap_from_prev_s_src` plus `recomputed gap_from_prev_s`
+
+### 06_session_category_share_long_vw
+
+- Aggregates event-level content time to session×category.
+- Computes per-session shares that sum to ~1.0.
+- Null-safe handling of zero-time sessions.
 
 ## Installing
 ### watch_events_fe
@@ -262,6 +270,15 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | hour_bin4                    | INT64 (0–3)           | case on PT hour: 0=0–5, 1=6–11, 2=12–17, 3=18–23                                         | coarser time-of-day grouping                   | 3                       |
 | creator_switch_flag          | BOOL                  | `creator != LAG(creator)` over global kept order                                         | marks switches between creators across events  | TRUE                    |
 | watch_ratio_content_quartile | INT64 (0–3, nullable) | case on `watch_ratio_content` (<0.25→0, <0.50→1, <0.75→2, else 3); null if ratio is null | coarse completion buckets                      | 1                       |
+
+
+### Variables output as session category share long view
+
+| Variable   | Type                       | How it’s made / parsed                                                                           | What it’s for                              | Example         |
+| ---------- | -------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------ | --------------- |
+| session_id | INT64/STRING (your schema) | Inherited from events (or stamped onto event_features_vw in Option A)                            | Join key to session-level tables           | 20200415_0031   |
+| category   | STRING                     | From events, grouped per session                                                                 | Category mix within a session              | News & Politics |
+| share      | FLOAT64 (0–1)              | SUM(content_elapsed_s) per (session, category) ÷ SUM(content_elapsed_s) per session; SAFE_DIVIDE | Fraction of session spent in that category | 0.37            |
 
 
 ## License
