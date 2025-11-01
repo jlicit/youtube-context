@@ -8,7 +8,7 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 `weekly_metrics_vw` aggregates session-level YouTube watch behavior into weekly KPIs. It reports both wall clock viewing (actual time spent) and speed-aware content time (runtime consumed after accounting for playback speed).
 
 ## Features
-### watch_events_fe
+### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
 - Timezone-aware timestamps (America/Los_Angeles).
 - Elapsed seconds parsed from `Elapsed Time` (`hh:mm:ss`, `mm:ss`, or `ss`).
@@ -16,7 +16,7 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 - Sessionization using gap thresholds (30 min default) with binge flags (≥45 min or ≥5 videos).
 - Category-relative “high-cuts” flag using per-category 75th percentile of cuts/min.
 - Use of `SAFE_CAST`, `SAFE_PARSE_*`, and `SAFE_DIVIDE`.
-### sessions_features_tbl
+### 02_sessions_features_tbl
 - Sessionization with configurable idle gap.
 - Wall clock watched seconds with tail capping on the final event.
 - Content-time (runtime actually advanced) using playback speed.
@@ -24,7 +24,7 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 - CPM: wall time and content time variants.
 - Average playback speed per session.
 - Binge flags by time, count, and content-time.
-### weekly_metrics_vw
+### 03_weekly_metrics_vw
 - Weekly rollups with Monday week start and Pacific Time localization.
 - Dual time lenses: Wall time (what you actually spent watching). Content time (runtime consumed at your playback speed).
 - Binge metrics: rate and time share (both wall time and content-time definitions).
