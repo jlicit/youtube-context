@@ -31,7 +31,34 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 - Cuts/min intensity: unweighted and time-weighted averages (and content-time variants).
 - Playback-speed KPI: week-level average playback speed.
 - Use of `SAFE_DIVIDE`, `NULLIF`, and rounding for KPI cards.
-- 
+
+### 04_data_validation_check (OPTIONAL)
+How to read:
+
+**Sessions table health**
+- `row_count` should be less than 0
+- `negative_time` should be 0
+- `zero_time_sessions` should be 0 (a few isn’t bad but you might want to look into it)
+- `min_ts/max_ts` should match your overall date range
+
+**Weekly rollup counts match raw sessions**
+- `counts_match` should be True for every row. Any False means the bucketing or joins are off
+
+**Weekly hours recompute check**
+- `abs_diff` should be 0 (or ≤ 0.01 from rounding). Bigger gaps means aggregation logic is off.
+
+**Weighted vs unweighted cuts**
+
+Some difference is normal. Huge difference (e.g., > 5 CPM) mean a few long sessions dominate; not wrong, just informative.
+
+**Spike finder**
+
+Occasional long sessions (e.g., 6–10h) are possible.
+
+**PT boundary check**
+
+Check that boundary times match up.
+
 ## Installing
 ### watch_events_fe
 This project assumes BigQuery Standard SQL.
