@@ -1,11 +1,13 @@
 
 ## About
-`watch_events_fe` creates a clean, feature-rich view of YouTube watch events for analysis and dashboards.  
+`01_watch_events_fe` creates a clean, feature-rich view of YouTube watch events for analysis and dashboards.  
 It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior, derives binge/high-cuts flags, and applies playback speed rules to help interpret “time watched” consistently across periods.
 
-`sessions_features_tbl` builds session-level features from YouTube watch events: sessionization (idle gap), wall-time vs content-time consumption (speed-aware), cuts-per-minute (wall & content), average playback speed, and binge flags (time- or count-based).
+`02_sessions_features_tbl` builds session-level features from YouTube watch events: sessionization (idle gap), wall-time vs content-time consumption (speed-aware), cuts-per-minute (wall & content), average playback speed, and binge flags (time- or count-based).
 
-`weekly_metrics_vw` aggregates session-level YouTube watch behavior into weekly KPIs. It reports both wall clock viewing (actual time spent) and speed-aware content time (runtime consumed after accounting for playback speed).
+`03_weekly_metrics_vw` aggregates session-level YouTube watch behavior into weekly KPIs. It reports both wall clock viewing (actual time spent) and speed-aware content time (runtime consumed after accounting for playback speed).
+
+`05_event_features_vw` generates a view of YouTube watch events for analysis and dashboarding. It standardizes time features, computes content-adjusted watch ratios (respecting playback speed and video duration), flags early exits, and bins scene-change rates by category.
 
 ## Features
 ### 01_watch_events_fe
@@ -58,6 +60,16 @@ Occasional long sessions (e.g., 6–10h) are possible.
 **PT boundary check**
 
 Check that boundary times match up.
+
+### 05_event_features_vw
+
+- `content_elapsed_s` with playback-speed adjustment and duration capping
+- `watch_ratio_content` and `watch_ratio_content_quartile` (0–3)
+- `early_exit_flag` based on min(60s, 25% of duration)
+- `hour_of_day_pt`, `day_of_week_pt`, `is_weekend_pt`, `hour_bin4`
+- `cuts_per_min_decile_cat` (0–9) and `cuts_per_min_quintile_cat` (0–4) by category
+- `creator_switch_flag` (global previous-event comparison)
+- preserves source `gap_from_prev_s_src` plus `recomputed gap_from_prev_s`
 
 ## Installing
 ### watch_events_fe
@@ -129,6 +141,15 @@ Ensure the source table exists:
 - Content-time KPIs: `hours consumed`, `avg playback speed`, `binge rate (content)`, `binge time share (content)`, `cuts/min (unweighted & time-weighted using session_consumed_runtime_s)`.
 
 If you watched at ~2× for long periods and later at 1×. Analysts could misread “time watched” without knowing this context. Explicit rules make that assumption visible and auditable.
+
+### event_featurs_vw
+- Input table watch_events_fe supplies raw events augmented with playback speed and cuts_per_min.
+- Enforce deterministic ordering by (watch_ts, video_id) and keep both the source gap and a recomputed global gap.
+- Content time is min(duration_meta_s, elapsed_s × playback_speed).
+- Early exits are those with content time ≤ min(60s, 25% of duration).
+- Derived local-time features using the provided timezone.
+- Rank cuts_per_min within each category to produce deciles and quintiles.
+- Create a simple 4-bucket hour_bin4 for easy day-part analysis.
 
 ## Variable Tables
 ### Variables used as input
@@ -208,6 +229,40 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | `binge_time_share_content`                 | FLOAT64      | `SUM(CASE WHEN binge_time_flag_content THEN session_consumed_runtime_s ELSE 0 END) / SUM(session_consumed_runtime_s)`               | Fraction of weekly content time in binge sessions                 | `0.589` |
 | `mean_cuts_per_min_unweighted_content`     | FLOAT64      | `AVG(session_mean_cuts_per_min_content)`                                                                                            | Simple average across sessions using content-minute CPM           | `21.74` |
 | `mean_cuts_per_min_time_weighted_content`  | FLOAT64      | `SUM(session_mean_cuts_per_min_content * session_consumed_runtime_s) / SUM(session_consumed_runtime_s)`                             | Content-time weighted CPM                                         | `15.2` |
+
+
+### Variables output as event features
+
+| Variable                     | Type                  | How it’s made / parsed                                                                   | What it’s for                                  | Example                 |
+| ---------------------------- | --------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------- |
+| session_id                   | INT64                 | from `watch_events_fe`                                                                   | groups events into sessions                    | 1847362                 |
+| watch_ts                     | TIMESTAMP             | carried from source                                                                      | global event ordering; local-time features     | 2021-04-08 11:21:14 UTC |
+| prev_watch_ts_global         | TIMESTAMP             | `LAG(watch_ts)` over global kept stream                                                  | audit: prior kept event time (global)          | 2021-04-08 11:19:39 UTC |
+| video_id                     | STRING                | `NULLIF(video_id,'#NAME?')`                                                              | deterministic tie-breaks in ordering           | eO0nX0eZ0mw             |
+| creator                      | STRING                | as-is                                                                                    | creator-level flags & switch detection         | CNBC                    |
+| category                     | STRING                | as-is                                                                                    | category-relative deciles/bins                 | News & Politics         |
+| duration_meta_s              | FLOAT64 (sec)         | from metadata                                                                            | caps speed-aware progress; runtime denominator | 600                     |
+| elapsed_s                    | FLOAT64 (sec)         | from source (wall-clock)                                                                 | base “time spent” before next event            | 156                     |
+| playback_speed               | FLOAT64               | `COALESCE(playback_speed, 1.0)`                                                          | adjusts progress for 1.25×/2×                  | 2                       |
+| cuts_per_min                 | FLOAT64               | from source                                                                              | pace/tempo proxy                               | 18                      |
+| high_cuts_flag               | BOOL                  | `COALESCE(high_cuts_flag, FALSE)`                                                        | quick filter for high-tempo content            | TRUE                    |
+| gap_from_prev_s              | INT64 (sec)           | `TIMESTAMP_DIFF(watch_ts, LAG(watch_ts), SECOND)` on kept stream                         | idle gap since previous kept event (global)    | 95                      |
+| gap_from_prev_s_src          | INT64 (sec)           | upstream `gap_prev_s` (pre-filter)                                                       | audit: original gap before filtering           | 87                      |
+| rn_in_session                | INT64                 | `ROW_NUMBER()` within `session_id` by time                                               | position of event within session               | 1                       |
+| is_new_session               | BOOL                  | `ROW_NUMBER()=1` within session (kept stream)                                            | marks first kept event of a session            | TRUE                    |
+| is_new_session_src           | BOOL                  | upstream `new_session_flag`                                                              | audit: original session-start flag             | FALSE                   |
+| content_elapsed_s            | FLOAT64 (sec)         | `LEAST(duration_meta_s, elapsed_s * playback_speed)`                                     | speed-aware progress, capped at runtime        | 300                     |
+| watch_ratio_content          | FLOAT64 (0–1)         | `content_elapsed_s / NULLIF(duration_meta_s, 0)`                                         | share of the video effectively advanced        | 0.5                     |
+| early_exit_flag              | BOOL                  | `content_elapsed_s <= LEAST(60, 0.25*duration_meta_s)`                                   | flags “left early” (≤60s or ≤25%)              | TRUE                    |
+| hour_of_day_pt               | INT64 (0–23)          | `EXTRACT(HOUR FROM DATETIME(watch_ts,'America/Los_Angeles'))`                            | local-hour analyses (PT)                       | 23                      |
+| day_of_week_pt               | INT64 (1–7)           | `EXTRACT(DAYOFWEEK FROM DATETIME(watch_ts,'America/Los_Angeles'))`                       | day-of-week analyses (PT)                      | 6                       |
+| is_weekend_pt                | BOOL                  | `day_of_week_pt IN (1,7)`                                                                | weekend filter (Sun/Sat in PT)                 | TRUE                    |
+| cuts_per_min_decile_cat      | INT64 (0–9)           | `NTILE(10)` by `category` on `cuts_per_min` minus 1                                      | category-relative decile (0=low)               | 7                       |
+| cuts_per_min_quintile_cat    | INT64 (0–4)           | `NTILE(5)` by `category` on `cuts_per_min` minus 1                                       | category-relative quintile (0–4)               | 3                       |
+| hour_bin4                    | INT64 (0–3)           | case on PT hour: 0=0–5, 1=6–11, 2=12–17, 3=18–23                                         | coarser time-of-day grouping                   | 3                       |
+| creator_switch_flag          | BOOL                  | `creator != LAG(creator)` over global kept order                                         | marks switches between creators across events  | TRUE                    |
+| watch_ratio_content_quartile | INT64 (0–3, nullable) | case on `watch_ratio_content` (<0.25→0, <0.50→1, <0.75→2, else 3); null if ratio is null | coarse completion buckets                      | 1                       |
+
 
 ## License
 MIT
