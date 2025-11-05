@@ -13,6 +13,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `07_sessions_enriched_vw` enriches session-level analytics with category concentration (HHI, entropy), top category share, local-time features (hour, weekend), prior-session gaps, and creator switch rates.
 
+`08_weekly_behavior_vw` is a weekly view used to analyze session and event patterns over time (hours watched, binge rate, cuts per minute, time-of-day mix, etc.).
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -81,6 +83,14 @@ Check that boundary times match up.
 - Computes per-session shares that sum to ~1.0.
 - Null-safe handling of zero-time sessions.
 
+### 08_weekly_behavior_vw
+- Stable Monday-based weekly buckets in PT
+- Wall-time and time-weighted cuts-per-minute
+- Session quality signals (binge, avg session length, playback speed)
+- Event quality signals (early exit, creator switches)
+- 4-week trailing moving average
+- Simple change-point flags for A/B or policy shifts
+  
 ## Installing
 ### watch_events_fe
 This project assumes BigQuery Standard SQL.
@@ -324,6 +334,29 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | events_in_session_calc_switch       | INT64                            | Count of deduped, time-contributing events from event_features_vw: keep rows with content_elapsed_s > 0; QUALIFY ROW_NUMBER() OVER (PARTITION BY session_id, watch_ts, video_id) = 1 | Aligned event count for creator-switch metrics; denominator for bounded rate; compare to events_in_session to see pipeline differences | 5                       |
 | creator_switches                    | INT64                            | On ordered, deduped stream (ORDER BY watch_ts, video_id), count transitions where creator ≠ LAG(creator); NULLs treated as no switch                                                 | Numerator for switch behavior: how often you change creators within a session                                                          | 3                       |
 | creator_switch_rate                 | FLOAT64 (0–1; NULL if ≤ 1 event) | SAFE_DIVIDE(creator_switches, events_in_session_calc_switch - 1) on the same deduped stream                                                                                          | Bounded probability of switching creators between consecutive videos in a session (higher = more variety-seeking)                      | 0.75                    |
+
+### Variables output as weekly behavior
+| Variable                        | Type                             | How it’s made / parsed                                                                                             | What it’s for                               | Example                 |
+| ------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- | ----------------------- |
+| week_start                      | TIMESTAMP (PT weeks)             | TIMESTAMP_TRUNC(session_start_ts, WEEK(MONDAY), 'America/Los_Angeles')                                             | Week grain for all weekly charts            | 2019-02-18 08:00:00 UTC |
+| hours_watched                   | FLOAT64 (hours)                  | ROUND(SUM(session_total_time_s) / 3600.0, 2)                                                                       | Total real watch time per week              | 12.07                   |
+| sessions                        | INT64                            | COUNT(*) over sessions_features_tbl grouped by week                                                                | Weekly session count                        | 39                      |
+| binge_rate                      | FLOAT64 (0–1)                    | ROUND(SAFE_DIVIDE(SUM(CASE WHEN binge_time_flag OR binge_count_flag THEN 1 ELSE 0 END), COUNT(*)), 3)              | Share of sessions classified as binge       | 0.24                    |
+| mean_cuts_per_min_unweighted    | FLOAT64                          | ROUND(AVG(session_mean_cuts_per_min), 2)                                                                           | Simple average pacing across sessions       | 10.49                   |
+| mean_cuts_per_min_time_weighted | FLOAT64                          | ROUND(SAFE_DIVIDE(SUM(session_mean_cuts_per_min * session_total_time_s), NULLIF(SUM(session_total_time_s), 0)), 2) | Time-weighted pacing across sessions        | 9.44                    |
+| avg_session_min                 | FLOAT64 (minutes)                | SAFE_DIVIDE(SUM(session_total_time_s), NULLIF(COUNT(*), 0)) / 60.0                                                 | Average session length (real time)          | 17.8                    |
+| avg_playback_speed              | FLOAT64                          | SAFE_DIVIDE(SUM(session_consumed_runtime_s), NULLIF(SUM(session_total_time_s), 0))                                 | Average playback speed per week             | 1.18                    |
+| early_exit_rate                 | FLOAT64 (0–1)                    | SAFE_DIVIDE(SUM(CASE WHEN early_exit_flag THEN 1 ELSE 0 END), COUNT(*)) on event_features_vw per week              | Share of events that were early exits       | 0.31                    |
+| high_cuts_event_rate            | FLOAT64 (0–1)                    | SAFE_DIVIDE(SUM(CASE WHEN high_cuts_flag THEN 1 ELSE 0 END), COUNT(*)) on event_features_vw per week               | Share of events with high pacing            | 0.12                    |
+| creator_switch_rate             | FLOAT64 (0–1)                    | SAFE_DIVIDE(SUM(CASE WHEN creator_switch_flag THEN 1 ELSE 0 END), COUNT(*)) on event_features_vw per week          | Share of events that switch creators        | 0.47                    |
+| mean_watch_ratio_content        | FLOAT64 (0–1)                    | AVG(watch_ratio_content) across events per week                                                                    | Average share of content consumed per event | 0.42                    |
+| share_hour_bin0                 | FLOAT64 (0–1)                    | SAFE_DIVIDE(SUM(CASE WHEN hour_bin4 = 0 THEN 1 ELSE 0 END), COUNT(*))                                              | Share of events 00:00–05:59 PT              | 0.06                    |
+| share_hour_bin1                 | FLOAT64 (0–1)                    | SAFE_DIVIDE(SUM(CASE WHEN hour_bin4 = 1 THEN 1 ELSE 0 END), COUNT(*))                                              | Share of events 06:00–11:59 PT              | 0.18                    |
+| share_hour_bin2                 | FLOAT64 (0–1)                    | SAFE_DIVIDE(SUM(CASE WHEN hour_bin4 = 2 THEN 1 ELSE 0 END), COUNT(*))                                              | Share of events 12:00–17:59 PT              | 0.34                    |
+| share_hour_bin3                 | FLOAT64 (0–1)                    | SAFE_DIVIDE(SUM(CASE WHEN hour_bin4 = 3 THEN 1 ELSE 0 END), COUNT(*))                                              | Share of events 18:00–23:59 PT              | 0.42                    |
+| hours_watched_ma4               | FLOAT64 (hours)                  | 4-week moving average of hours_watched using WINDOW ROWS BETWEEN 3 PRECEDING AND CURRENT ROW                       | Smoothing for trend lines                   | 8.28                    |
+| post_intervention               | BOOL                             | DATE(week_start) >= DATE '2023-11-01'                                                                              | Segment pre/post change                     | TRUE                    |
+| weeks_since_intervention        | INT64 (can be negative pre-date) | DATE_DIFF(DATE(week_start), DATE '2023-11-01', WEEK)                                                               | Relative week index for analysis            | 12                      |
 
 ## License
 MIT
