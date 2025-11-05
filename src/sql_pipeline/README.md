@@ -21,6 +21,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `11_monthly_creator_hhi_vw` monthly rollup of creator concentration and diversity metrics (HHI, effective number of creators, Shannon entropy, normalized indices) from per-event watch time.
 
+`12_event_tags_long_vw` explodes per-event tag lists (from `watch_events_fe.tags_raw`) into a long format—one row per event–tag—after normalizing delimiters, trimming, de-noising characters, lowercasing, and deduplicating.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -117,6 +119,12 @@ Check that boundary times match up.
 - HHI (unbounded) and normalized HHI (0–1)
 - Shannon entropy (nats) and entropy normalized to 0–1
 - Top creator + share each month
+
+### 12_event_tags_long_vw
+- Normalizes/cleans tags (unifies delimiters, trims, strips brackets/quotes/#, lowercases)
+- Explodes to long format (one row per event–tag) and deduplicates per event
+- Validates 11-char YouTube video_id and filters blanks to reduce noise
+- Preserves engagement fields (watch_ratio_content, early_exit_flag, cuts_per_min) for analysis
   
 ## Installing
 ### watch_events_fe
@@ -419,6 +427,21 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | hhi_norm_0_1       | FLOAT64 [0–1]         | SAFE_DIVIDE(hhi_creator − 1/K, 1 − 1/K), K = creator_count       | HHI normalized to [0,1] given K creators (0 = uniform, 1 = monopoly)             | 0.14                    |
 | top_creator        | STRING                | Creator with max share (ROW_NUMBER over share DESC, creator ASC) | Label of most-watched creator that month                                         | Linus Tech Tips         |
 | top_share          | FLOAT64 [0–1]         | Max share for month (share of top_creator)                       | Share of total monthly content minutes from top creator                          | 0.07                    |
+
+### Variables output as event tags long
+
+| Variable            | Type               | How it’s made / parsed                                                                                                                                                                                                     | What it’s for                                                         | Example                 |
+| ------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------- |
+| watch_ts            | TIMESTAMP (UTC)    | From `event_features_vw` (joined to `watch_events_fe` on `(watch_ts, video_id)`)                                                                                                                                           | Event timestamp to align back to events/sessions                      | 2024-04-16 00:03:13 UTC |
+| session_id          | INT64              | From `event_features_vw`                                                                                                                                                                                                   | Join key to session-level tables                                      | 1847362                 |
+| video_id            | STRING (11 chars)  | From `event_features_vw`; valid YouTube IDs enforced via `REGEXP_CONTAINS(video_id, r'^[A-Za-z0-9_-]{11}$')`                                                                                                               | Join key to video/event dimensions; prevents bad IDs (e.g., `#NAME?`) | XWzEVrRBrXU             |
+| creator             | STRING             | From `event_features_vw`                                                                                                                                                                                                   | Creator/channel analyses by tag                                       | MKBHD                   |
+| category            | STRING             | From `event_features_vw`                                                                                                                                                                                                   | Category × tag breakdowns                                             | Science & Technology    |
+| tag                 | STRING (lowercase) | From `watch_events_fe.tags_raw`: unify delimiters (pipes/semicolons → commas), normalize comma spacing, split on comma, trim; strip `[]()\"#`; collapse whitespace; lowercase; deduplicate per `(watch_ts, video_id, tag)` | Canonical tag label per event; use for tag-level aggregations         | tech news               |
+| content_elapsed_s   | FLOAT64 (seconds)  | From `event_features_vw` (time advancing content); repeated per tag row                                                                                                                                                    | Time-weighted tag analyses (e.g., sum by tag)                         | 212.5                   |
+| watch_ratio_content | FLOAT64 (0–1+)     | From `event_features_vw` as `content_elapsed_s / duration_meta_s`; repeated per tag row                                                                                                                                    | Progress/retention proxy at tag level                                 | 0.74                    |
+| early_exit_flag     | BOOL               | From `event_features_vw`                                                                                                                                                                                                   | Segment tag mix among early exits                                     | TRUE                    |
+| cuts_per_min        | FLOAT64            | From `event_features_vw`                                                                                                                                                                                                   | “Tempo” signal per tag occurrence                                     | 18.4                    |
 
 ## License
 MIT
