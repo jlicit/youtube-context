@@ -19,6 +19,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `10_top_creators_yearly_vw` computes yearly watch-time leaders by creator, using Pacific Time (PT) year boundaries to better reflect human behavior. Outputs minutes watched, share of year, and multiple tie-aware ranks for flexible charting.
 
+`11_monthly_creator_hhi_vw` monthly rollup of creator concentration and diversity metrics (HHI, effective number of creators, Shannon entropy, normalized indices) from per-event watch time.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -110,6 +112,12 @@ Check that boundary times match up.
 - Content minutes rollup + yearly share `(SAFE_DIVIDE)`
 - `RANK`, `DENSE_RANK`, and `ROW_NUMBER` for ties
 
+### 11_monthly_creator_hhi_vw
+- Month-bucketed (Pacific Time) using TIMESTAMP_TRUNC with timezone
+- HHI (unbounded) and normalized HHI (0–1)
+- Shannon entropy (nats) and entropy normalized to 0–1
+- Top creator + share each month
+  
 ## Installing
 ### watch_events_fe
 This project assumes BigQuery Standard SQL.
@@ -398,6 +406,19 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | dense_rank_in_year | INT64                  | DENSE_RANK() OVER (PARTITION BY year ORDER BY minutes_content DESC)              | Like rank, but without gaps between ties               | 2               |
 | rownum_tiebreak    | INT64                  | ROW_NUMBER() OVER (PARTITION BY year ORDER BY minutes_content DESC, creator ASC) | Stable ordering to break ties deterministically        | 2               |
 
+### Variables output as monthly creator hhi
+
+| Variable           | Type                  | How it's made / parsed                                           | What it's for                                                                    | Example                 |
+| ------------------ | --------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------- |
+| month_start        | TIMESTAMP (PT months) | TIMESTAMP_TRUNC(watch_ts, MONTH, 'America/Los_Angeles')          | Monthly grain for creator concentration metrics                                  | 2019-03-01 08:00:00 UTC |
+| creator_count      | INT64                 | COUNT(*) creators in the month after computing shares            | Number of distinct creators with >0 minutes in month (K)                         | 278                     |
+| hhi_creator        | FLOAT64 (0–1]         | SUM(share * share) over creators in month                        | Herfindahl–Hirschman Index of creator concentration (higher = more concentrated) | 0.016224                |
+| effective_creators | FLOAT64 (≥1)          | 1.0 / hhi_creator                                                | “Effective” number of equally sized creators; intuitive diversity proxy          | 61.6                    |
+| entropy_nats       | FLOAT64 (≥0)          | −SUM(share * LN(share))                                          | Shannon entropy of the monthly creator distribution (higher = more diverse)      | 4.13                    |
+| entropy_norm_0_1   | FLOAT64 [0–1]         | SAFE_DIVIDE(entropy_nats, LN(creator_count))                     | Entropy normalized to [0,1] given K creators (1 = perfectly uniform)             | 0.86                    |
+| hhi_norm_0_1       | FLOAT64 [0–1]         | SAFE_DIVIDE(hhi_creator − 1/K, 1 − 1/K), K = creator_count       | HHI normalized to [0,1] given K creators (0 = uniform, 1 = monopoly)             | 0.14                    |
+| top_creator        | STRING                | Creator with max share (ROW_NUMBER over share DESC, creator ASC) | Label of most-watched creator that month                                         | Linus Tech Tips         |
+| top_share          | FLOAT64 [0–1]         | Max share for month (share of top_creator)                       | Share of total monthly content minutes from top creator                          | 0.07                    |
 
 ## License
 MIT
