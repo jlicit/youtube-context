@@ -17,6 +17,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `09_weekly_category_share_vw` is a weekly category mix view by aggregating content time into Monday-based PT weeks and returning each category’s minutes and share of total weekly minutes.
 
+`10_top_creators_yearly_vw` computes yearly watch-time leaders by creator, using Pacific Time (PT) year boundaries to better reflect human behavior. Outputs minutes watched, share of year, and multiple tie-aware ranks for flexible charting.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -101,6 +103,12 @@ Check that boundary times match up.
 - Weeks are bucketed in America/Los_Angeles; the resulting bucket shows as 08:00/07:00 UTC pre/post DST.
 - Divisions use SAFE_DIVIDE with a NULLIF guard on totals.
 - Minutes are rounded in-view to avoid noisy chart labels
+
+### 10_top_creators_yearly_vw
+- PT-aligned year `(EXTRACT(YEAR FROM DATETIME(watch_ts, 'America/Los_Angeles')))`
+- Creator cleanup `(TRIM + null/blank to (Unknown))`
+- Content minutes rollup + yearly share `(SAFE_DIVIDE)`
+- `RANK`, `DENSE_RANK`, and `ROW_NUMBER` for ties
 
 ## Installing
 ### watch_events_fe
@@ -377,6 +385,19 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | category        | STRING               | COALESCE(NULLIF(TRIM(category), ''), '(Unknown)')                     | Category label per YouTube metadata                         | News & Politics         |
 | minutes_content | FLOAT64 (minutes)    | SUM(content_elapsed_s)/60 by (week_start, category)                   | Total content minutes watched for that category in the week | 124.33                  |
 | share_of_week   | FLOAT64 (0–1)        | minutes_content / SUM(minutes_content) OVER (PARTITION BY week_start) | Fraction of weekly content time by category                 | 0.37                    |
+
+### Variables output as top creators yearly
+
+| Variable           | Type                   | How it's made / parsed                                                           | What it's for                                          | Example         |
+| ------------------ | ---------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------ | --------------- |
+| year               | INT64 (PT year)        | EXTRACT(YEAR FROM DATETIME(watch_ts, 'America/Los_Angeles'))                     | Annual aggregation anchor (Pacific Time)               | 2019            |
+| creator            | STRING                 | COALESCE(NULLIF(TRIM(creator), ''), '(Unknown)') from event_features_vw          | Grouping dimension for per-creator rollups             | Linus Tech Tips |
+| minutes_content    | FLOAT64 (minutes)      | SUM(content_elapsed_s)/60 by (year, creator)                                     | Total content minutes watched for creator in that year | 1462.33         |
+| share_of_year      | FLOAT64 (0–1)          | minutes_content ÷ SUM(minutes_content) over the same year (SAFE_DIVIDE)          | Creator’s fraction of annual content minutes           | 0.0731          |
+| rank_in_year       | INT64 (1=most minutes) | RANK() OVER (PARTITION BY year ORDER BY minutes_content DESC)                    | Creator rank within year; ties share the same rank     | 2               |
+| dense_rank_in_year | INT64                  | DENSE_RANK() OVER (PARTITION BY year ORDER BY minutes_content DESC)              | Like rank, but without gaps between ties               | 2               |
+| rownum_tiebreak    | INT64                  | ROW_NUMBER() OVER (PARTITION BY year ORDER BY minutes_content DESC, creator ASC) | Stable ordering to break ties deterministically        | 2               |
+
 
 ## License
 MIT
