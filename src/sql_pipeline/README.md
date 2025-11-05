@@ -15,6 +15,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `08_weekly_behavior_vw` is a weekly view used to analyze session and event patterns over time (hours watched, binge rate, cuts per minute, time-of-day mix, etc.).
 
+`09_weekly_category_share_vw` is a weekly category mix view by aggregating content time into Monday-based PT weeks and returning each category’s minutes and share of total weekly minutes.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -90,7 +92,16 @@ Check that boundary times match up.
 - Event quality signals (early exit, creator switches)
 - 4-week trailing moving average
 - Simple change-point flags for A/B or policy shifts
-  
+
+### 09_weekly_category_share_vw
+- `week_start` timestamp; (PT weeks via TIMESTAMP_TRUNC with WEEK(MONDAY))
+- `category` string; empty/null categories normalized to (Unknown)
+- `minutes_content` float64; category minutes per week, rounded to 2 decimals
+- `share_of_week` float64 in [0,1]; category minutes divided by weekly total
+- Weeks are bucketed in America/Los_Angeles; the resulting bucket shows as 08:00/07:00 UTC pre/post DST.
+- Divisions use SAFE_DIVIDE with a NULLIF guard on totals.
+- Minutes are rounded in-view to avoid noisy chart labels
+
 ## Installing
 ### watch_events_fe
 This project assumes BigQuery Standard SQL.
@@ -357,6 +368,15 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | hours_watched_ma4               | FLOAT64 (hours)                  | 4-week moving average of hours_watched using WINDOW ROWS BETWEEN 3 PRECEDING AND CURRENT ROW                       | Smoothing for trend lines                   | 8.28                    |
 | post_intervention               | BOOL                             | DATE(week_start) >= DATE '2023-11-01'                                                                              | Segment pre/post change                     | TRUE                    |
 | weeks_since_intervention        | INT64 (can be negative pre-date) | DATE_DIFF(DATE(week_start), DATE '2023-11-01', WEEK)                                                               | Relative week index for analysis            | 12                      |
+
+### Variables output as weekly category share
+
+| Variable        | Type                 | How it's made / parsed                                                | What it's for                                               | Example                 |
+| --------------- | -------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------- |
+| week_start      | TIMESTAMP (PT weeks) | TIMESTAMP_TRUNC(watch_ts, WEEK(MONDAY), 'America/Los_Angeles')        | Week grain for category shares                              | 2019-02-18 08:00:00 UTC |
+| category        | STRING               | COALESCE(NULLIF(TRIM(category), ''), '(Unknown)')                     | Category label per YouTube metadata                         | News & Politics         |
+| minutes_content | FLOAT64 (minutes)    | SUM(content_elapsed_s)/60 by (week_start, category)                   | Total content minutes watched for that category in the week | 124.33                  |
+| share_of_week   | FLOAT64 (0–1)        | minutes_content / SUM(minutes_content) OVER (PARTITION BY week_start) | Fraction of weekly content time by category                 | 0.37                    |
 
 ## License
 MIT
