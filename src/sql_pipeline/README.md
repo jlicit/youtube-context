@@ -29,6 +29,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `15_batch_export_views_to_csv` Iterates over a list of view names in a dataset, snapshots each view into a (replaceable) table named `<view>_pub`, exports each table to CSV files in a GCS bucket/prefix and prints a summary of the exported paths.
 
+`16_weekly-validation_checks` BigQuery QC suite validating session-level data and weekly rollups.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -145,6 +147,15 @@ Check that boundary times match up.
 - Denominators exposed (used vs total) for auditability
 - Equality check between the overall rate and weighted per-creator parts
 
+### 16_weekly-validation_checks
+Checks:
+- Sessions table health: basic sanity flags and time bounds.
+- Weekly counts parity: raw sessions vs. weekly_metrics_vw.
+- Hours parity: derived hours vs. hours_watched in the view.
+- Pace weighting sanity: unweighted vs time-weighted cuts/min (last N weeks).
+- Spike finder: outlier sessions (very long or extreme cuts/min).
+- PT week bucketing: edge cases around local midnight.
+
 ## Installing
 ### watch_events_fe
 This project assumes BigQuery Standard SQL.
@@ -242,6 +253,11 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
   `bq query --use_legacy_sql=false < bq_export_views_to_gcs.sql`
 
 - Typical IAM you’ll need: BigQuery Job User on the project, BigQuery Data Viewer (or above) on the dataset and Storage Object Creator (or above) on the destination bucket.
+
+### weekly-validation_checks
+- Open the script in BigQuery.
+- Edit variables in the CONFIG block (project, dataset, table/view names, time zone).
+- Run all. Each block returns a result set you can export or screenshot for PRs.
   
 ## Variable Tables
 ### Variables used as input
