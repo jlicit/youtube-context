@@ -1,9 +1,0 @@
-[project]
-name = "cutcounter"
-version = "0.1.0"
-description = "Scene‑change (cut) counter for YouTube and local videos"
-requires-python = ">=3.9"
-dependencies = ["yt-dlp", "ffmpeg-python"]  # plus pytest/ruff as dev‑deps
-
-[project.scripts]
-cut-counter = "cutcounter.cli:main"
