@@ -23,6 +23,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `12_event_tags_long_vw` explodes per-event tag lists (from `watch_events_fe.tags_raw`) into a long format—one row per event–tag—after normalizing delimiters, trimming, de-noising characters, lowercasing, and deduplicating.
 
+`13_event_tag_cooccur_vw` computes pairwise tag co-occurrences from event-level tags, with both raw and 30-minute-capped dwell weights so you can rank meaningful tag relationships without long videos dominating.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -125,6 +127,11 @@ Check that boundary times match up.
 - Explodes to long format (one row per event–tag) and deduplicates per event
 - Validates 11-char YouTube video_id and filters blanks to reduce noise
 - Preserves engagement fields (watch_ratio_content, early_exit_flag, cuts_per_min) for analysis
+
+### 13_event_tag_cooccur_vw
+- Unordered tag pairs per event (no duplicates)
+- Tunable stoplist, min tag length, “must contain letters,” min co-occurrence count
+- Robust ranking using 30-minute dwell cap
   
 ## Installing
 ### watch_events_fe
@@ -442,6 +449,17 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | watch_ratio_content | FLOAT64 (0–1+)     | From `event_features_vw` as `content_elapsed_s / duration_meta_s`; repeated per tag row                                                                                                                                    | Progress/retention proxy at tag level                                 | 0.74                    |
 | early_exit_flag     | BOOL               | From `event_features_vw`                                                                                                                                                                                                   | Segment tag mix among early exits                                     | TRUE                    |
 | cuts_per_min        | FLOAT64            | From `event_features_vw`                                                                                                                                                                                                   | “Tempo” signal per tag occurrence                                     | 18.4                    |
+
+
+### Variables output as event tag cooccur
+
+| Variable              | Type        | How it’s made / parsed                                                                                                         | What it’s for                               | Example    |
+| --------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- | ---------- |
+| tag_a                 | STRING      | Distinct, normalized tags from `event_tags_long_vw`; per event, tags are sorted and paired; keep unordered pairs with `a < b`. | Pair edge: left node.                       | "unboxing" |
+| tag_b                 | STRING      | Same as `tag_a`.                                                                                                               | Pair edge: right node.                      | "review"   |
+| cooccurs              | INT64       | `COUNT(*)` events where `(tag_a, tag_b)` co-occur; filtered by `min_cooccurs` (default 5).                                     | Unweighted popularity of the pair.          | 607        |
+| cooccurs_weight_s     | FLOAT64 (s) | Sum of raw event dwell across all events containing the pair: `SUM(dwell_s)`.                                                  | Time-weighted strength (reference).         | 412,380    |
+| cooccurs_weight_30m_s | FLOAT64 (s) | Sum of capped dwell per event: `SUM(LEAST(dwell_s, 1800))` (30-min cap by default).                                            | Robust time-weighted rank (use for charts). | 303,060    |
 
 ## License
 MIT
