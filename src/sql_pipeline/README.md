@@ -25,6 +25,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `13_event_tag_cooccur_vw` computes pairwise tag co-occurrences from event-level tags, with both raw and 30-minute-capped dwell weights so you can rank meaningful tag relationships without long videos dominating.
 
+`14_creator_return_rewatch_weekly_vw` Single weekly view that tracks whether viewers return to the same creator within 7 days and how often any video is a rewatch. It exposes both per-creator rows and an overall “ALL_CREATORS” row, plus sanity-check fields (weighted_from_parts) to verify that the overall rate equals a properly weighted mean of per-creator rates.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -132,7 +134,15 @@ Check that boundary times match up.
 - Unordered tag pairs per event (no duplicates)
 - Tunable stoplist, min tag length, “must contain letters,” min co-occurrence count
 - Robust ranking using 30-minute dwell cap
-  
+
+### 14_creator_return_rewatch_weekly_vw
+- 7-day creator return rate (per creator and overall)
+- Rewatch rate (share of events that are ≥2nd watch of a video)
+- Clean event filtering (valid YouTube IDs, positive dwell, non-blank creators)
+- Pacific-time weekly bucketing (WEEK(MONDAY), 'America/Los_Angeles')
+- Denominators exposed (used vs total) for auditability
+- Equality check between the overall rate and weighted per-creator parts
+
 ## Installing
 ### watch_events_fe
 This project assumes BigQuery Standard SQL.
@@ -460,6 +470,24 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | cooccurs              | INT64       | `COUNT(*)` events where `(tag_a, tag_b)` co-occur; filtered by `min_cooccurs` (default 5).                                     | Unweighted popularity of the pair.          | 607        |
 | cooccurs_weight_s     | FLOAT64 (s) | Sum of raw event dwell across all events containing the pair: `SUM(dwell_s)`.                                                  | Time-weighted strength (reference).         | 412,380    |
 | cooccurs_weight_30m_s | FLOAT64 (s) | Sum of capped dwell per event: `SUM(LEAST(dwell_s, 1800))` (30-min cap by default).                                            | Robust time-weighted rank (use for charts). | 303,060    |
+
+### Variables output as creator return rewatch weekly
+
+| Variable                    | Type                    | How it’s made / parsed                                                                                                                                                                                                                                                                            | What it’s for                                                              | Example                 |
+| --------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------- |
+| week_start                  | TIMESTAMP (PT week)     | `TIMESTAMP_TRUNC(watch_ts, WEEK(MONDAY), 'America/Los_Angeles')`. DST-aware (PST weeks show 08:00:00 UTC, PDT weeks 07:00:00 UTC).                                                                                                                                                                | Week bucket for all weekly metrics.                                        | 2025-06-02 07:00:00 UTC |
+| creator                     | STRING (nullable)       | For per-creator rows: creator name from `event_features_vw`. For overall rows: NULL.                                                                                                                                                                                                              | Dimension for per-creator metrics.                                         | SirPugger               |
+| creator_scope               | STRING                  | Literal: `PER_CREATOR` or `ALL_CREATORS`.                                                                                                                                                                                                                                                         | Distinguishes per-creator rows vs overall rows.                            | PER_CREATOR             |
+| return_7d_rate              | FLOAT64 (0–1, nullable) | Event-level 7-day “next time to same creator” flag averaged within week. Per-creator: AVG over that creator’s events; Overall: AVG over all creators’ events. Flags are TRUE if the next view of the same creator is within ≤7 days (PT-date diff), FALSE otherwise, NULL if no next view exists. | Weekly loyalty/return rate.                                                | 0.7945                  |
+| creator_events_used         | INT64                   | Count of events with a non-NULL flag (i.e., events that actually contribute to the AVG).                                                                                                                                                                                                          | Denominator used for `return_7d_rate`. Use this for weighting/validations. | 152                     |
+| creator_events_total        | INT64                   | All qualifying events before the 7-day flag filter (time-contributing, deduped, valid IDs).                                                                                                                                                                                                       | Volume context; may exceed `*_used` when many events lack a next view yet. | 168                     |
+| rewatch_rate                | FLOAT64 (0–1)           | Weekly AVG of `rn > 1` where `rn = ROW_NUMBER() OVER (PARTITION BY video_id ORDER BY watch_ts)`. Overall metric repeated on every row for that week.                                                                                                                                              | Share of events that are re-watches of a video.                            | 0.07237                 |
+| rewatch_events              | INT64                   | Weekly count of events used in `rewatch_rate` (all qualifying events).                                                                                                                                                                                                                            | Denominator for `rewatch_rate`.                                            | 152                     |
+| weighted_from_parts         | FLOAT64 (0–1, nullable) | Overall rows only. Event-weighted average of per-creator `return_7d_rate`: `SUM(COALESCE(rate,0) * creator_events_used) / NULLIF(SUM(creator_events_used), 0)`.                                                                                                                                   | Cross-check that the overall equals the weighted per-creator pieces.       | 0.86885                 |
+| events_used_from_parts      | INT64 (nullable)        | Overall rows only. `SUM(creator_events_used)` across all creators for the week.                                                                                                                                                                                                                   | Denominator used in `weighted_from_parts`.                                 | 152                     |
+| events_total_from_parts     | INT64 (nullable)        | Overall rows only. `SUM(creator_events_total)` across all creators for the week.                                                                                                                                                                                                                  | Volume context for pairwise comparison with `return_events_all_total`.     | 168                     |
+| return_vs_weighted_abs_diff | FLOAT64 (nullable)      | Overall rows only. `ABS(return_7d_rate - weighted_from_parts)`.                                                                                                                                                                                                                                   | Numerical agreement check between overall and weighted-from-parts.         | 0.000000001             |
+| return_vs_weighted_match    | BOOL (nullable)         | Overall rows only. `ABS(diff) ≤ 1e-9`.                                                                                                                                                                                                                                                            | Boolean “green light” for validation.                                      | TRUE                    |
 
 ## License
 MIT
