@@ -318,7 +318,7 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 | `consumed_runtime_s` *(per event, temp)* | FLOAT64| `LEAST(duration_meta_s, watched_s * playback_speed)`                                                                            | Temp per-event field used for session aggregates              | `—`                              |
 | `cuts_watched` *(per event, temp)*     | FLOAT64  | `SAFE_MULTIPLY(cuts_total, SAFE_DIVIDE(consumed_runtime_s, duration_meta_s))`                                                   | Temp per-event field scaling cuts by content fraction consumed | `—`                              |
 
-                         |
+                         
 ### Variables output as weekly metrics
 
 | Variable                                   | Type         | How it’s made / formula (BigQuery)                                                                                                  | What it’s for                                                     | Example |
