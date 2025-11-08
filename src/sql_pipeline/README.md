@@ -27,6 +27,8 @@ It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior
 
 `14_creator_return_rewatch_weekly_vw` Single weekly view that tracks whether viewers return to the same creator within 7 days and how often any video is a rewatch. It exposes both per-creator rows and an overall “ALL_CREATORS” row, plus sanity-check fields (weighted_from_parts) to verify that the overall rate equals a properly weighted mean of per-creator rates.
 
+`15_batch_export_views_to_csv` Iterates over a list of view names in a dataset, snapshots each view into a (replaceable) table named `<view>_pub`, exports each table to CSV files in a GCS bucket/prefix and prints a summary of the exported paths.
+
 ## Features
 ### 01_watch_events_fe
 - Typing and parsing for messy `date` and `time` fields (multiple formats, SAFE_* parsing).
@@ -232,6 +234,15 @@ If you watched at ~2× for long periods and later at 1×. Analysts could misread
 - Creator-switch rate using a deduped, time-contributing event stream.
 - Uses safe numerics (SAFE_DIVIDE) and clear tie-breaks for deterministic results.
 
+### batch_export_views_to_csv
+- What it does: Iterates a view list, snapshots to `<view>_pub` tables, exports each to CSV shards in GCS, prints a summary of paths.
+- Customize: edit `v_project`, `v_dataset`, `v_gcs_uri`, and the `v_views` array. Optional: set `v_compression` to `'GZIP'`.
+- Run it:
+
+  `bq query --use_legacy_sql=false < bq_export_views_to_gcs.sql`
+
+- Typical IAM you’ll need: BigQuery Job User on the project, BigQuery Data Viewer (or above) on the dataset and Storage Object Creator (or above) on the destination bucket.
+  
 ## Variable Tables
 ### Variables used as input
 
