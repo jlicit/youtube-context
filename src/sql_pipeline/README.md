@@ -3,31 +3,31 @@
 `01_watch_events_fe` creates a clean, feature-rich view of YouTube watch events for analysis and dashboards.  
 It normalizes timestamps, computes elapsed seconds, sessionizes viewing behavior, derives binge/high-cuts flags, and applies playback speed rules to help interpret “time watched” consistently across periods.
 
-`02_sessions_features_tbl` builds session-level features from YouTube watch events: sessionization (idle gap), wall-time vs content-time consumption (speed-aware), cuts-per-minute (wall & content), average playback speed, and binge flags (time- or count-based).
+`02_sessions_features_tbl` builds session-level features from YouTube watch events: sessionization (idle gap), wall-time vs content-time consumption (speed-aware), cuts-per-minute, average playback speed, and binge flags (time- or count-based).
 
-`03_weekly_metrics_vw` aggregates session-level YouTube watch behavior into weekly KPIs. It reports both wall clock viewing (actual time spent) and speed-aware content time (runtime consumed after accounting for playback speed).
+`03_weekly_metrics_vw` aggregates session-level YouTube watch behavior into weekly indicators. It reports both wall clock viewing (actual time spent) and speed-aware content time (runtime consumed after accounting for playback speed).
 
 `05_event_features_vw` generates a view of YouTube watch events for analysis and dashboarding. It standardizes time features, computes content-adjusted watch ratios (respecting playback speed and video duration), flags early exits, and bins scene-change rates by category.
 
-`06_session_category_share_long_vw` produces a long-format table of per-session category shares—the fraction of each session’s consumed runtime spent in each category. It’s used for downstream content mix visuals and trend analysis.
+`06_session_category_share_long_vw` produces a long-format table of per-session category shares the fraction of each session’s consumed runtime spent in each category. It’s used for downstream content mix visuals and trend analysis.
 
-`07_sessions_enriched_vw` enriches session-level analytics with category concentration (HHI, entropy), top category share, local-time features (hour, weekend), prior-session gaps, and creator switch rates.
+`07_sessions_enriched_vw` enriches session-level analytics with category concentration, top category share, local-time features (hour, weekend), prior-session gaps, and creator switch rates.
 
 `08_weekly_behavior_vw` is a weekly view used to analyze session and event patterns over time (hours watched, binge rate, cuts per minute, time-of-day mix, etc.).
 
-`09_weekly_category_share_vw` is a weekly category mix view by aggregating content time into Monday-based PT weeks and returning each category’s minutes and share of total weekly minutes.
+`09_weekly_category_share_vw` is a weekly category mix view by aggregating content time into Monday-based weeks and returning each category’s minutes and share of total weekly minutes.
 
 `10_top_creators_yearly_vw` computes yearly watch-time leaders by creator, using Pacific Time (PT) year boundaries to better reflect human behavior. Outputs minutes watched, share of year, and multiple tie-aware ranks for flexible charting.
 
 `11_monthly_creator_hhi_vw` monthly rollup of creator concentration and diversity metrics (HHI, effective number of creators, Shannon entropy, normalized indices) from per-event watch time.
 
-`12_event_tags_long_vw` explodes per-event tag lists (from `watch_events_fe.tags_raw`) into a long format—one row per event–tag—after normalizing delimiters, trimming, de-noising characters, lowercasing, and deduplicating.
+`12_event_tags_long_vw` per-event tag lists (from `watch_events_fe.tags_raw`) into a long format—one row per event–tag—after normalizing delimiters, trimming, de-noising characters, lowercasing, and deduplicating.
 
 `13_event_tag_cooccur_vw` computes pairwise tag co-occurrences from event-level tags, with both raw and 30-minute-capped dwell weights so you can rank meaningful tag relationships without long videos dominating.
 
-`14_creator_return_rewatch_weekly_vw` Single weekly view that tracks whether viewers return to the same creator within 7 days and how often any video is a rewatch. It exposes both per-creator rows and an overall “ALL_CREATORS” row, plus sanity-check fields (weighted_from_parts) to verify that the overall rate equals a properly weighted mean of per-creator rates.
+`14_creator_return_rewatch_weekly_vw` single weekly view that tracks whether viewers return to the same creator within 7 days and how often any video is a rewatch. It exposes both per-creator rows and an overall “ALL_CREATORS” row, plus sanity-check fields (weighted_from_parts) to verify that the overall rate equals a properly weighted mean of per-creator rates.
 
-`15_batch_export_views_to_csv` Iterates over a list of view names in a dataset, snapshots each view into a (replaceable) table named `<view>_pub`, exports each table to CSV files in a GCS bucket/prefix and prints a summary of the exported paths.
+`15_batch_export_views_to_csv` iterates over a list of view names in a dataset, snapshots each view into a (replaceable) table named `<view>_pub`, exports each table to CSV files in a GCS bucket/prefix and prints a summary of the exported paths.
 
 `16_weekly-validation_checks` BigQuery QC suite validating session-level data and weekly rollups.
 
